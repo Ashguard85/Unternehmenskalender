@@ -1,3 +1,15 @@
+# v3 – Desktop-Interaktionen repariert
+
+v3 behebt die beim Desktop-Umbau verlorenen Klick-Handler:
+
+- Termine aus Liste, Startseite und Jahresplan lassen sich wieder öffnen und bearbeiten.
+- Leere Zellen im Jahresplan öffnen wieder direkt „Termin eintragen“ mit vorausgefülltem Datum.
+- Unternehmen lassen sich wieder öffnen, bearbeiten und löschen.
+- Listen-PDF und Jahres-PDF öffnen auf dem Desktop zuverlässig in einem separaten Browser-Tab.
+- Der Jahresplan hat zusätzlich wieder einen direkten „Drucken“-Button mit Browser-Druckdialog.
+- Beim Schliessen eines Termin-/Unternehmensdialogs wird der gesperrte Body-Zustand sauber zurückgesetzt.
+- Keine Datenbankmigration und keine Änderung an bestehenden Terminen/Unternehmen erforderlich.
+
 # Stiftungskalender v2 — Docker Desktop
 
 Eigenständiger, desktop-first Stiftungskalender für mehrere Unternehmen.

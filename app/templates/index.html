@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="icon" type="image/png" href="/static/favicon-64.png">
-  <link rel="stylesheet" href="/static/app.css?v=2">
+  <link rel="stylesheet" href="/static/app.css?v=3">
   <title>{{ title }}</title>
 </head>
 <body>
@@ -101,7 +101,7 @@
       </div>
       <div class="list-actions">
         <a id="listCsvLink" class="secondary linkbtn server-export" href="#">CSV</a>
-        <button id="listPdfButton" class="secondary server-export" type="button">PDF / Teilen</button>
+        <button id="listPdfButton" class="secondary server-export" type="button">PDF öffnen / drucken</button>
         <button id="listIcsButton" class="secondary server-export" type="button">Kalender (.ics)</button>
         <span id="listExportHint" class="small"></span>
       </div>
@@ -119,7 +119,8 @@
       <select id="yearSelect" class="input fit"></select>
       <select id="yearCompanyFilter" class="input year-company-filter" aria-label="Unternehmen"></select>
       <button id="yearMonthSelect" class="secondary year-month-select" type="button">Monate: Alle</button>
-      <button id="yearPdfButton" class="secondary server-export" type="button">PDF / Drucken</button>
+      <button id="yearPrintButton" class="secondary" type="button">Drucken</button>
+      <button id="yearPdfButton" class="secondary server-export" type="button">PDF öffnen</button>
       <a id="csvLink" class="secondary linkbtn server-export" href="#">CSV</a>
       <span class="spacer"></span>
     </div>
@@ -166,7 +167,7 @@
       <details class="card settings-disclosure" open>
         <summary>System</summary>
         <div class="settings-disclosure-body">
-          <div class="system-facts"><div><span>Version</span><strong>v2</strong></div><div><span>Betrieb</span><strong>Docker / Desktop</strong></div><div><span>Daten</span><strong>SQLite persistent</strong></div></div>
+          <div class="system-facts"><div><span>Version</span><strong>v3</strong></div><div><span>Betrieb</span><strong>Docker / Desktop</strong></div><div><span>Daten</span><strong>SQLite persistent</strong></div></div>
           <p class="small topgap">Updates erfolgen kontrolliert über Docker/Portainer. Browser-Caching dient nur normalen statischen Dateien; es gibt keinen separaten App-Updatepfad.</p>
         </div>
       </details>
@@ -448,6 +449,6 @@
 </div>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=2"></script>
+<script src="/static/app.js?v=3"></script>
 </body>
 </html>

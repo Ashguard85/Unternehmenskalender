@@ -629,7 +629,14 @@ function openModal(id=null){
   qs("#modalDuplicate").style.display=e?"block":"none";qs("#modalShare").style.display=e?"block":"none";qs("#modalDelete").style.display=e?"block":"none";
   qs("#modalBack").classList.add("open");document.body.classList.add("modal-open");
 }
-function closeModal(){qs("#modalBack").classList.remove("open");editingId=null;}
+function syncBodyModalState(){
+  document.body.classList.toggle("modal-open",Boolean(qs(".modalback.open")));
+}
+function closeModal(){
+  qs("#modalBack")?.classList.remove("open");
+  editingId=null;
+  syncBodyModalState();
+}
 function prefillDate(day){openModal();qs("#modalDate").value=day;syncDateShell(qs("#modalDate"));updateDateContext("modal");}
 
 function formatIsoDate(day){
@@ -687,8 +694,8 @@ function renderPeopleSettings(){
 }
 function openPersonEditor(id){const p=people.find(x=>Number(x.id)===Number(id));if(!p)return;qs("#personEditId").value=p.id;qs("#personEditName").value=p.name||"";qs("#personEditColor").value=p.color||"#ececec";if(qs("#personEditIcalTitle"))qs("#personEditIcalTitle").value="";qs("#personEditorBack").classList.add("open");document.body.classList.add("modal-open");}
 function closePersonEditor(){
-  qs("#personEditorBack").classList.remove("open");
-  document.body.classList.remove("modal-open");
+  qs("#personEditorBack")?.classList.remove("open");
+  syncBodyModalState();
 }
 async function savePersonEditor(){const id=Number(qs("#personEditId").value);const name=qs("#personEditName").value.trim();if(!name)return toast("Name fehlt");try{await api(`/api/companies/${id}`,{method:"PUT",body:JSON.stringify({name,color:qs("#personEditColor").value})});closePersonEditor();await loadPeople();await loadEntries();toast("Unternehmen aktualisiert");}catch(e){toast(e.message);}}
 async function deletePerson(id){if(!confirm("Unternehmen wirklich löschen? Zugeordnete Termine werden nicht gelöscht; sie bleiben als globale bzw. andere Zuordnungen erhalten."))return;try{await api(`/api/companies/${id}`,{method:"DELETE"});await loadPeople();await loadEntries();toast("Unternehmen gelöscht");}catch(e){toast(e.message);}}
@@ -845,6 +852,15 @@ function filenameFromDisposition(value, fallback){
   return plain?.[1] || fallback;
 }
 
+function openPdfDocument(url){
+  if(!url) return;
+  const win=window.open(url,"_blank","noopener");
+  if(!win){
+    // Popup blocked: navigating the current tab still guarantees access to the PDF.
+    window.location.href=url;
+  }
+}
+
 async function shareServerPdf(url, fallbackName="stiftungskalender.pdf"){
   try{
     toast("PDF wird erstellt …");
@@ -911,8 +927,40 @@ async function shareServerFile(url, fallbackName, mimeType, preparing="Datei wir
 
 
 document.addEventListener("click",e=>{
+  const openEntry=e.target.closest("[data-open-entry]");
+  if(openEntry){
+    e.preventDefault();
+    openModal(Number(openEntry.dataset.openEntry));
+    return;
+  }
+
+  const prefill=e.target.closest("[data-prefill-date]");
+  if(prefill){
+    e.preventDefault();
+    prefillDate(prefill.dataset.prefillDate);
+    return;
+  }
+
+  const editCompany=e.target.closest("[data-person-edit]");
+  if(editCompany){
+    e.preventDefault();
+    openPersonEditor(Number(editCompany.dataset.personEdit));
+    return;
+  }
+
+  const deleteCompany=e.target.closest("[data-person-delete]");
+  if(deleteCompany){
+    e.preventDefault();
+    deletePerson(Number(deleteCompany.dataset.personDelete));
+    return;
+  }
+
   const pdfButton=e.target.closest(".pdf-share-button");
-  if(pdfButton){e.preventDefault();shareServerPdf(pdfButton.dataset.url,"stiftungskalender-liste.pdf");return;}
+  if(pdfButton){
+    e.preventDefault();
+    openPdfDocument(pdfButton.dataset.url);
+    return;
+  }
 });
 
 document.addEventListener("DOMContentLoaded", async ()=>{
@@ -951,17 +999,17 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   qs("#listExportPeople").addEventListener("click",openExportPeopleModal);
   qs("#listPdfButton").addEventListener("click",()=>{
     const url=qs("#listPdfButton").dataset.url;
-    if(url) shareServerPdf(url,"stiftungskalender-liste.pdf");
+    if(url) openPdfDocument(url);
   });
   qs("#yearPdfButton").addEventListener("click",()=>{
     const year=qs("#yearSelect").value;
     const params=yearMonthQuery();
     const company=qs("#yearCompanyFilter")?.value||"";if(company)params.append("company",company);
     const query=params.toString();
-    const suffix=yearMonthsAreAll()?"":yearMonths.length===1?`-${String(yearMonths[0]).padStart(2,"0")}`:`-${yearMonths.length}-monate`;
     const url=`/export-year.pdf?year=${encodeURIComponent(year)}${query?`&${query}`:""}`;
-    shareServerPdf(url,`jahresplan-${year}${suffix}.pdf`);
+    openPdfDocument(url);
   });
+  qs("#yearPrintButton")?.addEventListener("click",()=>window.print());
   qs("#exportPeopleAll").addEventListener("click",()=>setExportPeopleChecks("all"));
   qs("#exportPeopleApply").addEventListener("click",applyExportPeopleSelection);
   qs("#batchPreview").addEventListener("click",previewBatch);
