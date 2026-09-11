@@ -854,11 +854,19 @@ function filenameFromDisposition(value, fallback){
 
 function openPdfDocument(url){
   if(!url) return;
-  const win=window.open(url,"_blank","noopener");
-  if(!win){
-    // Popup blocked: navigating the current tab still guarantees access to the PDF.
-    window.location.href=url;
-  }
+  // Do not use the return value of window.open(..., "noopener") to detect
+  // popup blocking: some browsers deliberately return null even though the
+  // new tab was opened. That previously caused the current app tab to be
+  // redirected to the PDF as well. A temporary target=_blank link opens only
+  // the new tab and never navigates the current application.
+  const link=document.createElement("a");
+  link.href=url;
+  link.target="_blank";
+  link.rel="noopener noreferrer";
+  link.style.display="none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 async function shareServerPdf(url, fallbackName="stiftungskalender.pdf"){

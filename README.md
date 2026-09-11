@@ -1,14 +1,12 @@
-# v3 – Desktop-Interaktionen repariert
+# v4 – Jahresdruck und PDF-Export repariert
 
-v3 behebt die beim Desktop-Umbau verlorenen Klick-Handler:
+v4 behebt zwei Fehler aus v3:
 
-- Termine aus Liste, Startseite und Jahresplan lassen sich wieder öffnen und bearbeiten.
-- Leere Zellen im Jahresplan öffnen wieder direkt „Termin eintragen“ mit vorausgefülltem Datum.
-- Unternehmen lassen sich wieder öffnen, bearbeiten und löschen.
-- Listen-PDF und Jahres-PDF öffnen auf dem Desktop zuverlässig in einem separaten Browser-Tab.
-- Der Jahresplan hat zusätzlich wieder einen direkten „Drucken“-Button mit Browser-Druckdialog.
-- Beim Schliessen eines Termin-/Unternehmensdialogs wird der gesperrte Body-Zustand sauber zurückgesetzt.
-- Keine Datenbankmigration und keine Änderung an bestehenden Terminen/Unternehmen erforderlich.
+- Der Jahres-PDF-Export verursachte einen HTTP-500-Fehler, weil die Hilfsfunktion `period_rows()` beim Desktop-Umbau fehlte. Sie ist wieder vorhanden und wird auch von `/api/periods` verwendet.
+- PDF-Links öffnen nur noch einen neuen Tab. Die bisherige Fallback-Logik konnte bei Browsern mit `noopener` trotz erfolgreich geöffnetem Tab zusätzlich den ursprünglichen App-Tab auf die PDF-URL weiterleiten.
+- Der Jahres-PDF-Renderer zeichnet den Kalender jetzt direkt auf die PDF-Seite. Dadurch ist er unabhängig von Platypus-Layoutgrenzen und robuster bei Legenden, Mehrtagesterminen und Monatsauswahl.
+- Jahres-PDF wurde mit Testdaten, Unternehmensfilter, Zeitraum/Legende und Einzelmonat erfolgreich als gültige PDF erzeugt.
+- Keine Datenbankmigration erforderlich.
 
 # Stiftungskalender v2 — Docker Desktop
 
@@ -82,4 +80,4 @@ Das JSON-Komplettbackup enthält Unternehmen, Termine, Zeiträume und Kalender-A
 
 ## Versionierung
 
-Dieses eigenständige Desktop-Projekt beginnt neu bei v1. Diese Ausgabe ist **v2** und entfernt vollständig die frühere PWA-/Push-Architektur.
+Dieses eigenständige Desktop-Projekt beginnt neu bei v1. Diese Ausgabe ist **v4**. Die frühere PWA-/Push-Architektur bleibt vollständig entfernt.

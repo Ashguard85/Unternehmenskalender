@@ -30,9 +30,10 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Flowable
+from reportlab.pdfgen import canvas as pdf_canvas
 
 APP_TITLE = os.getenv("APP_TITLE", "Stiftungskalender")
-APP_VERSION = "2"
+APP_VERSION = "4"
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DB_PATH = DATA_DIR / "stiftungskalender.sqlite"
 BACKUP_DIR = DATA_DIR / "backups"
@@ -1106,6 +1107,19 @@ def api_entries_batch_create():
     return jsonify({"ok":True,"created_count":len(created_ids),"skipped_count":len(plan["matched_days"])-len(created_ids)})
 
 
+def period_rows(year=""):
+    """Return stored periods, optionally limited to periods overlapping a year."""
+    year = str(year or "").strip()
+    query = "SELECT id,start_day,end_day,kind,label,color,source,external_uid,created_at,updated_at FROM periods"
+    params = ()
+    if re.fullmatch(r"\d{4}", year):
+        query += " WHERE start_day <= ? AND end_day >= ?"
+        params = (f"{year}-12-31", f"{year}-01-01")
+    query += " ORDER BY start_day ASC,end_day ASC,id ASC"
+    with db() as conn:
+        return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+
 @app.get("/api/periods")
 @login_required
 def api_periods():
@@ -1802,47 +1816,21 @@ def export_year_pdf():
         if period_used:
             display_periods.append(period)
 
+    # Direct canvas rendering is intentionally used here instead of a large
+    # Platypus table.  The annual grid has a fixed geometry and direct drawing
+    # avoids LayoutError exceptions when legends or row heights change.
     output = io.BytesIO()
     page_size = A4 if single_month else landscape(A4)
-    margin = 10 * mm if single_month else 8 * mm
-    plan_title = (f"Monatsplan {month_names[month_indices[0] - 1]} {year}" if single_month else (f"Jahresplan {year}" if len(month_indices)==12 else f"Monatsauswahl {year} · {len(month_indices)} Monate"))
+    page_w, page_h = page_size
+    margin_x = 10 * mm if single_month else 7 * mm
+    plan_title = (
+        f"Monatsplan {month_names[month_indices[0] - 1]} {year}"
+        if single_month
+        else (f"Jahresplan {year}" if len(month_indices) == 12 else f"Monatsauswahl {year} · {len(month_indices)} Monate")
+    )
     if company_filter:
         plan_title += f" · {company_filter}"
-    doc = SimpleDocTemplate(
-        output,
-        pagesize=page_size,
-        leftMargin=margin,
-        rightMargin=margin,
-        topMargin=7 * mm,
-        bottomMargin=7 * mm,
-        title=plan_title,
-        author=APP_TITLE,
-    )
 
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "YearTitle",
-        parent=styles["Title"],
-        fontName="Helvetica-Bold",
-        fontSize=10 if single_month else 9.2,
-        leading=11 if single_month else 10.2,
-        textColor=colors.HexColor("#1e2524"),
-        spaceAfter=1.2 * mm if single_month else 0.8 * mm,
-    )
-    head_style = ParagraphStyle(
-        "YearHead",
-        parent=styles["Normal"],
-        fontName="Helvetica-Bold",
-        fontSize=6.4 if single_month else 5.0,
-        leading=6.8 if single_month else 5.4,
-        alignment=1,
-        textColor=colors.HexColor("#1e2524"),
-    )
-
-    # Build the legend before choosing the row height.  The old fixed 4.1 mm
-    # annual rows left a large unused area at the bottom of landscape A4.  The
-    # annual grid now grows vertically into the available frame while reserving
-    # enough space for title, legend and a small safety buffer.
     legend_items = []
     if company_filter:
         with db() as conn:
@@ -1867,116 +1855,179 @@ def export_year_pdf():
             legend_items.append(key)
 
     per_row = 3 if single_month else 7
-    legend_row_count = (len(legend_items) + per_row - 1) // per_row
+    legend_rows = max(1, (len(legend_items) + per_row - 1) // per_row)
+    legend_line_h = 4.2 * mm
+    legend_total_h = legend_rows * legend_line_h
 
-    usable_w = page_size[0] - doc.leftMargin - doc.rightMargin
-    usable_h = page_size[1] - doc.topMargin - doc.bottomMargin
+    pdf = pdf_canvas.Canvas(output, pagesize=page_size)
+    pdf.setTitle(plan_title)
+    pdf.setAuthor(APP_TITLE)
+
+    def safe_color(value, fallback="#ececec"):
+        try:
+            return colors.HexColor(value or fallback)
+        except Exception:
+            return colors.HexColor(fallback)
+
+    def fitted_text(text, max_width, font_name="Helvetica-Bold", start_size=5.0, min_size=2.8):
+        label = str(text or "")
+        size = start_size
+        while size > min_size and pdf.stringWidth(label, font_name, size) > max_width:
+            size -= 0.2
+        if pdf.stringWidth(label, font_name, size) > max_width:
+            trimmed = label
+            while len(trimmed) > 2 and pdf.stringWidth(trimmed + "…", font_name, size) > max_width:
+                trimmed = trimmed[:-1]
+            label = trimmed + "…"
+        return label, size
+
+    # Title
+    pdf.setFillColor(colors.HexColor("#1e2524"))
+    pdf.setFont("Helvetica-Bold", 11 if single_month else 10)
+    pdf.drawString(margin_x, page_h - 9 * mm, plan_title)
+
+    grid_left = margin_x
+    grid_right = page_w - margin_x
+    grid_top = page_h - 14 * mm
+    grid_bottom = 8 * mm + legend_total_h + (1.5 * mm if legend_items else 0)
+    grid_w = grid_right - grid_left
+    grid_h = grid_top - grid_bottom
+    header_h = 6 * mm if single_month else 4.8 * mm
+    day_h = max(3.5 * mm, (grid_h - header_h) / 31.0)
     day_col_w = 10 * mm if single_month else 6.2 * mm
-    month_w = (usable_w - 2 * day_col_w) / len(month_indices)
-    header_h = 6 * mm if single_month else 4.5 * mm
+    month_w = (grid_w - 2 * day_col_w) / len(month_indices)
 
-    if single_month:
-        day_h = 5.8 * mm
-    else:
-        title_probe = Paragraph(plan_title, title_style)
-        _, title_content_h = title_probe.wrap(usable_w, usable_h)
-        title_total_h = title_content_h + title_style.spaceAfter
-        # Each legend item has a fixed 3.7 mm row plus 0.5 pt top/bottom
-        # padding on the outer legend table.
-        legend_h_est = legend_row_count * ((3.7 * mm) + 1.0)
-        vertical_buffer = 6.0 * mm
-        available_for_days = usable_h - title_total_h - header_h - (0.8 * mm) - legend_h_est - vertical_buffer
-        day_h = max(4.1 * mm, min(5.8 * mm, available_for_days / 31.0))
+    # Header background + labels.
+    pdf.setFillColor(colors.HexColor("#f5f7f6"))
+    pdf.rect(grid_left, grid_top - header_h, grid_w, header_h, stroke=0, fill=1)
+    pdf.setFillColor(colors.HexColor("#1e2524"))
+    pdf.setFont("Helvetica-Bold", 6.2 if single_month else 5.2)
+    pdf.drawCentredString(grid_left + day_col_w / 2, grid_top - header_h + 1.6 * mm, "Tag")
+    for idx, month_idx in enumerate(month_indices):
+        x = grid_left + day_col_w + idx * month_w
+        label, fsize = fitted_text(month_names[month_idx - 1], month_w - 2, start_size=(6.2 if single_month else 5.2), min_size=3.5)
+        pdf.setFont("Helvetica-Bold", fsize)
+        pdf.drawCentredString(x + month_w / 2, grid_top - header_h + 1.6 * mm, label)
+    pdf.setFont("Helvetica-Bold", 6.2 if single_month else 5.2)
+    pdf.drawCentredString(grid_right - day_col_w / 2, grid_top - header_h + 1.6 * mm, "Tag")
 
-    data = [[Paragraph("Tag", head_style)] +
-            [Paragraph(month_names[m - 1], head_style) for m in month_indices] +
-            [Paragraph("Tag", head_style)]]
-    last_col = len(month_indices) + 1
-    style_cmds = [
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dfe4e1")),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f5f7f6")),
-        ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#fafbfa")),
-        ("BACKGROUND", (last_col, 1), (last_col, -1), colors.HexColor("#fafbfa")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (last_col, 1), (last_col, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 1), (0, -1), 6 if single_month else 5.1),
-        ("FONTSIZE", (last_col, 1), (last_col, -1), 6 if single_month else 5.1),
-    ]
-
+    # Day rows and calendar cells.
     for day_num in range(1, 32):
-        row = [str(day_num)]
-        pdf_row = day_num
-        for col_pos, month_idx in enumerate(month_indices, start=1):
+        y_top = grid_top - header_h - (day_num - 1) * day_h
+        y = y_top - day_h
+        pdf.setFillColor(colors.HexColor("#fafbfa"))
+        pdf.rect(grid_left, y, day_col_w, day_h, stroke=0, fill=1)
+        pdf.rect(grid_right - day_col_w, y, day_col_w, day_h, stroke=0, fill=1)
+        pdf.setFillColor(colors.HexColor("#1e2524"))
+        pdf.setFont("Helvetica-Bold", 5.7 if single_month else 4.8)
+        baseline = y + max(1.0, (day_h - (5.7 if single_month else 4.8)) / 2)
+        pdf.drawCentredString(grid_left + day_col_w / 2, baseline, str(day_num))
+        pdf.drawCentredString(grid_right - day_col_w / 2, baseline, str(day_num))
+
+        for col_idx, month_idx in enumerate(month_indices):
+            x = grid_left + day_col_w + col_idx * month_w
             try:
                 d = date(year, month_idx, day_num)
-                valid = True
             except ValueError:
-                valid = False
-
-            if not valid:
-                row.append("")
-                style_cmds.append(("BACKGROUND", (col_pos, pdf_row), (col_pos, pdf_row), colors.HexColor("#f1f2f1")))
+                pdf.setFillColor(colors.HexColor("#f1f2f1"))
+                pdf.rect(x, y, month_w, day_h, stroke=0, fill=1)
                 continue
 
             iso = d.isoformat()
             if d.weekday() >= 5:
-                style_cmds.append(("BACKGROUND", (col_pos, pdf_row), (col_pos, pdf_row), colors.HexColor("#fff2b9")))
-            row.append(YearOverviewCell(
-                month_w,
-                day_h,
-                by_day.get(iso),
-                periods_by_day.get(iso, []),
-                continuation_by_day.get(iso),
-            ))
-        row.append(str(day_num))
-        data.append(row)
+                pdf.setFillColor(colors.HexColor("#fff2b9"))
+                pdf.rect(x, y, month_w, day_h, stroke=0, fill=1)
 
-    year_table = Table(
-        data,
-        colWidths=[day_col_w] + [month_w] * len(month_indices) + [day_col_w],
-        rowHeights=[header_h] + [day_h] * 31,
-        hAlign="LEFT",
-    )
-    year_table.setStyle(TableStyle(style_cmds))
+            entry = by_day.get(iso)
+            continuation = continuation_by_day.get(iso)
+            periods = periods_by_day.get(iso, [])
+            inset = 0.6
+            rail_w = month_w * 0.17 if periods else 0
+            gap = 0.6 if periods else 0
+            content_w = max(1, month_w - 2 * inset - rail_w - gap)
+            content_h = max(1, day_h - 2 * inset)
 
-    legend_rows = []
-    for i in range(0, len(legend_items), per_row):
-        chunk = legend_items[i:i + per_row]
-        row = [_legend_item(label, color_value, width=(usable_w / per_row) - 1 * mm) for label, color_value in chunk]
-        row += [""] * (per_row - len(row))
-        legend_rows.append(row)
-    legend = Table(legend_rows, colWidths=[usable_w / per_row] * per_row, hAlign="LEFT") if legend_rows else None
-    if legend:
-        legend.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 1),
-            ("TOPPADDING", (0, 0), (-1, -1), 0.5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0.5),
-        ]))
+            if continuation and entry:
+                cont_h = content_h * 0.28
+                entry_h = max(1, content_h - cont_h - 0.45)
+            elif continuation:
+                cont_h = content_h
+                entry_h = 0
+            else:
+                cont_h = 0
+                entry_h = content_h
 
-    story = [Paragraph(plan_title, title_style), year_table, Spacer(1, 0.8 * mm)]
-    if legend:
-        story.append(legend)
+            if entry:
+                pdf.setFillColor(safe_color(entry.get("color")))
+                pdf.roundRect(x + inset, y + inset, content_w, entry_h, 1.4, stroke=0, fill=1)
+                label, fsize = fitted_text(entry.get("person") or entry.get("title") or "Termin", content_w - 2, start_size=(5.3 if single_month else 4.4), min_size=2.7)
+                pdf.setFillColor(colors.HexColor("#1e2524"))
+                pdf.setFont("Helvetica-Bold", fsize)
+                pdf.drawCentredString(x + inset + content_w / 2, y + inset + max(0.5, (entry_h - fsize) / 2 + 0.4), label)
 
-    def footer(canvas, doc_obj):
-        canvas.saveState()
-        canvas.setFont("Helvetica", 6)
-        canvas.setFillColor(colors.HexColor("#68716f"))
-        canvas.drawString(margin, 3.2 * mm, APP_TITLE)
-        canvas.drawRightString(page_size[0] - margin, 3.2 * mm, plan_title)
-        canvas.restoreState()
+            if continuation:
+                cont_y = y + inset + (entry_h + 0.45 if entry else 0)
+                pdf.setFillColor(safe_color(continuation.get("color"), "#e4efeb"))
+                pdf.roundRect(x + inset, cont_y, content_w, cont_h, 1.2, stroke=0, fill=1)
+                label = str(continuation.get("person") or continuation.get("title") or "Termin")
+                suffix = str(continuation.get("continuation_text") or "").strip()
+                if suffix:
+                    label = f"{label} · {suffix}"
+                label, fsize = fitted_text(label, content_w - 2, start_size=(4.8 if single_month else 3.7), min_size=2.5)
+                pdf.setFillColor(colors.HexColor("#1e2524"))
+                pdf.setFont("Helvetica-Bold", fsize)
+                pdf.drawCentredString(x + inset + content_w / 2, cont_y + max(0.4, (cont_h - fsize) / 2 + 0.25), label)
 
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+            if periods:
+                rail_x = x + month_w - inset - rail_w
+                segment_h = content_h / len(periods)
+                for p_idx, period in enumerate(periods):
+                    pdf.setFillColor(safe_color(period.get("color"), "#80a4c2"))
+                    pdf.rect(rail_x, y + inset + p_idx * segment_h, rail_w, segment_h + 0.15, stroke=0, fill=1)
+
+    # Grid lines are drawn last so they remain crisp above fills.
+    pdf.setStrokeColor(colors.HexColor("#dfe4e1"))
+    pdf.setLineWidth(0.25)
+    x_positions = [grid_left, grid_left + day_col_w]
+    x_positions.extend(grid_left + day_col_w + i * month_w for i in range(1, len(month_indices) + 1))
+    x_positions.append(grid_right)
+    for x in x_positions:
+        pdf.line(x, grid_bottom, x, grid_top)
+    pdf.line(grid_left, grid_top, grid_right, grid_top)
+    pdf.line(grid_left, grid_top - header_h, grid_right, grid_top - header_h)
+    for i in range(1, 32):
+        yy = grid_top - header_h - i * day_h
+        pdf.line(grid_left, yy, grid_right, yy)
+
+    # Compact legend below the grid.
+    item_w = grid_w / per_row
+    legend_top = grid_bottom - 1.2 * mm
+    for idx, (label, color_value) in enumerate(legend_items):
+        row_idx = idx // per_row
+        col_idx = idx % per_row
+        x = grid_left + col_idx * item_w
+        y = legend_top - (row_idx + 1) * legend_line_h + 1.0 * mm
+        pdf.setFillColor(safe_color(color_value))
+        pdf.rect(x, y, 3.2 * mm, 2.6 * mm, stroke=0, fill=1)
+        label_text, fsize = fitted_text(label, item_w - 4.3 * mm, font_name="Helvetica", start_size=5.4, min_size=3.8)
+        pdf.setFillColor(colors.HexColor("#1e2524"))
+        pdf.setFont("Helvetica", fsize)
+        pdf.drawString(x + 4.0 * mm, y + 0.55 * mm, label_text)
+
+    pdf.setFillColor(colors.HexColor("#68716f"))
+    pdf.setFont("Helvetica", 5.5)
+    pdf.drawString(margin_x, 3.2 * mm, APP_TITLE)
+    pdf.drawRightString(page_w - margin_x, 3.2 * mm, plan_title)
+    pdf.showPage()
+    pdf.save()
+
     pdf_bytes = output.getvalue()
     output.close()
-    filename = (f"monatsplan-{year}-{month_indices[0]:02d}.pdf" if single_month else (year_export_filename(year) if len(month_indices)==12 else f"jahresplan-{year}-{len(month_indices)}-monate.pdf"))
+    filename = (
+        f"monatsplan-{year}-{month_indices[0]:02d}.pdf"
+        if single_month
+        else (year_export_filename(year) if len(month_indices) == 12 else f"jahresplan-{year}-{len(month_indices)}-monate.pdf")
+    )
     return Response(
         pdf_bytes,
         mimetype="application/pdf",
