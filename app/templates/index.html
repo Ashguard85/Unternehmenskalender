@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" type="image/png" href="/static/favicon-64.png">
+  <link rel="stylesheet" href="/static/app.css?v=2">
+  <title>{{ title }}</title>
+</head>
+<body>
+<div class="app">
+  <header class="topbar desktop-topbar">
+    <div class="brand">
+      <div class="logo"><img src="/static/icon-192.png" alt=""></div>
+      <div><h1>{{ title }}</h1><p>Unternehmenskalender</p></div>
+    </div>
+    <nav class="desktopnav" aria-label="Hauptnavigation">
+      <button class="navbtn active" data-page="home" onclick="showPage('home')">Übersicht</button>
+      <button class="navbtn" data-page="list" onclick="showPage('list')">Termine</button>
+      <button class="navbtn" data-page="year" onclick="showPage('year')">Jahresplan</button>
+      <button class="navbtn" data-page="companies" onclick="showPage('companies')">Unternehmen</button>
+      <button class="navbtn" data-page="settings" onclick="showPage('settings')">Einstellungen</button>
+    </nav>
+    <div class="topbar-actions">
+      <button class="primary new-event-button" type="button" onclick="openModal()">+ Neuer Termin</button>
+      {% if auth_enabled %}<form id="logoutForm" method="post" action="/logout"><button class="secondary" title="Abmelden">Abmelden</button></form>{% endif %}
+    </div>
+  </header>
+
+  <section id="homePage" class="page active">
+    <div class="hero">
+      <h2>Was steht an?</h2>
+      <p>Termin erfassen und festlegen, ob er für alle oder ausgewählte Unternehmen gilt.</p>
+    </div>
+
+    <div class="quickstats">
+      <div class="stat"><strong id="statUpcoming">0</strong><span>kommend</span></div>
+      <div class="stat"><strong id="statPeople">0</strong><span>Unternehmen</span></div>
+      <div class="stat"><strong id="statYear">0</strong><span>dieses Jahr</span></div>
+    </div>
+
+
+    <div class="grid two">
+      <div class="card">
+        <h3>Schnell eintragen</h3>
+        <label id="quickDateLabel" class="label">Datum</label>
+        <input id="quickDate" class="input" type="date"/>
+        <div id="quickDateContext" class="date-context"></div>
+        <div class="space"></div>
+        <label class="label" for="quickTitle">Titel</label>
+        <input id="quickTitle" class="input" maxlength="160" placeholder="z. B. Stiftungsratssitzung">
+        <div class="space"></div>
+        <label class="label">Gilt für</label>
+        <button id="quickScopeButton" class="secondary full company-scope-button" type="button">Alle Unternehmen</button>
+        <div id="quickScopeSummary" class="scope-summary small">Alle Unternehmen</div>
+        <div class="space"></div>
+        <div class="timing-control">
+          <label class="all-day-toggle"><input id="quickAllDay" type="checkbox" checked><span>Ganztägig</span></label>
+          <div id="quickTimeRange" class="time-range entry-datetime-range" hidden>
+            <label class="entry-start-time-field"><span>Von · Zeit</span><input id="quickStartTime" class="input time-input" type="time"></label>
+            <label class="entry-end-date-field"><span>Bis · Datum</span><input id="quickEndDate" class="input" type="date"></label>
+            <label class="entry-end-time-field"><span>Bis · Zeit</span><input id="quickEndTime" class="input time-input" type="time"></label>
+          </div>
+          <div id="quickRangeHint" class="small entry-range-hint" hidden></div>
+        </div>
+        <div class="space"></div>
+        <label class="label">Beschreibung <span class="small">(optional)</span></label>
+        <input id="quickNote" class="input" placeholder="z. B. Traktanden, Ort, Hinweise …"/>
+        <div class="space"></div>
+        <button class="primary" id="quickSave">Speichern</button>
+        <button class="secondary full topgap" id="openBatch">Mehrere Einträge erstellen</button>
+      </div>
+
+      <div class="card">
+        <div class="row"><h3>Die nächsten 7 Tage</h3><span class="spacer"></span><button class="secondary" onclick="showPage('list')">Alle</button></div>
+        <div id="nextList" class="list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="listPage" class="page">
+    <div class="hero">
+      <h2>Terminliste</h2>
+      <p>Alle kommenden Stiftungstermine – nach Unternehmen filterbar.</p>
+    </div>
+    <div class="card">
+      <div class="filters">
+        <button id="listExportPeople" class="secondary list-people-select" type="button">Unternehmen: Alle</button>
+        <select id="filterYear" class="input"></select>
+      </div>
+      <input id="filterSearch" class="input" placeholder="Suchen …"/>
+      <div class="calendar-range-export">
+        <div class="calendar-range-head">
+          <strong>Kalenderexport</strong>
+          <span class="small">Einmalige .ics-Datei</span>
+        </div>
+        <div class="calendar-range-grid">
+          <label><span class="label">Von</span><input id="listRangeFrom" class="input" type="date"></label>
+          <label><span class="label">Bis</span><input id="listRangeTo" class="input" type="date"></label>
+        </div>
+      </div>
+      <div class="list-actions">
+        <a id="listCsvLink" class="secondary linkbtn server-export" href="#">CSV</a>
+        <button id="listPdfButton" class="secondary server-export" type="button">PDF / Teilen</button>
+        <button id="listIcsButton" class="secondary server-export" type="button">Kalender (.ics)</button>
+        <span id="listExportHint" class="small"></span>
+      </div>
+      <div class="space"></div>
+      <div id="fullList" class="list"></div>
+    </div>
+  </section>
+
+  <section id="yearPage" class="page">
+    <div class="hero">
+      <h2>Jahresübersicht</h2>
+      <p>Monate horizontal, Tage vertikal, Wochenenden automatisch markiert.</p>
+    </div>
+    <div class="year-toolbar">
+      <select id="yearSelect" class="input fit"></select>
+      <select id="yearCompanyFilter" class="input year-company-filter" aria-label="Unternehmen"></select>
+      <button id="yearMonthSelect" class="secondary year-month-select" type="button">Monate: Alle</button>
+      <button id="yearPdfButton" class="secondary server-export" type="button">PDF / Drucken</button>
+      <a id="csvLink" class="secondary linkbtn server-export" href="#">CSV</a>
+      <span class="spacer"></span>
+    </div>
+    <div id="yearTableWrap" class="year-wrap"></div>
+    <div id="legend" class="legend"></div>
+    <div class="card topgap">
+      <h3>Übersicht pro Unternehmen</h3>
+      <div id="personStats" class="stats-list"></div>
+    </div>
+  </section>
+
+
+  <section id="companiesPage" class="page">
+    <div class="hero compact-hero">
+      <h2>Unternehmen</h2>
+      <p>Unternehmen verwalten, Farben festlegen und die Basis für unternehmensbezogene Termine pflegen.</p>
+    </div>
+    <div class="card company-admin-card">
+      <div class="section-head"><div><h3>Unternehmensverwaltung</h3><p class="small">Termine können global oder einem bzw. mehreren Unternehmen zugeordnet werden.</p></div></div>
+      <div id="peopleSettings" class="people-settings company-directory"></div>
+      <div class="person-add-row topgap">
+        <span class="person-add-label">Neues Unternehmen</span>
+        <input id="newPerson" class="input" placeholder="Unternehmensname">
+        <input id="newColor" type="color" value="#dbeafe" class="color" aria-label="Farbe">
+        <button class="secondary person-add-button" id="addPerson" type="button">Hinzufügen</button>
+      </div>
+      <details class="nested-disclosure topgap">
+        <summary>Mehrere Unternehmen auf einmal</summary>
+        <div class="nested-disclosure-body">
+          <p class="small">Ein Unternehmensname pro Zeile. Bereits vorhandene Namen werden übersprungen.</p>
+          <textarea id="companyBulkNames" class="input" rows="8" placeholder="Unternehmen A&#10;Unternehmen B&#10;Unternehmen C"></textarea>
+          <button id="companyBulkAdd" class="secondary topgap" type="button">Liste hinzufügen</button>
+        </div>
+      </details>
+    </div>
+  </section>
+  <section id="settingsPage" class="page">
+    <div class="hero">
+      <h2>Einstellungen</h2>
+      <p>Kalenderfreigaben, Feiertage, Import/Export und Datensicherung.</p>
+    </div>
+
+    <div class="grid settings-grid">
+      <details class="card settings-disclosure" open>
+        <summary>System</summary>
+        <div class="settings-disclosure-body">
+          <div class="system-facts"><div><span>Version</span><strong>v2</strong></div><div><span>Betrieb</span><strong>Docker / Desktop</strong></div><div><span>Daten</span><strong>SQLite persistent</strong></div></div>
+          <p class="small topgap">Updates erfolgen kontrolliert über Docker/Portainer. Browser-Caching dient nur normalen statischen Dateien; es gibt keinen separaten App-Updatepfad.</p>
+        </div>
+      </details>
+
+
+
+      <details class="card settings-disclosure">
+        <summary>Ferien & Feiertage</summary>
+        <div class="settings-disclosure-body">
+          <p class="small">Ferien kannst du als ganzen Zeitraum erfassen. Feiertage lassen sich importieren oder als Kalender-Abo automatisch synchronisieren.</p>
+          <div class="period-form-grid topgap">
+            <div><label class="label">Von</label><input id="periodStart" class="input" type="date"></div>
+            <div><label class="label">Bis</label><input id="periodEnd" class="input" type="date"></div>
+            <div><label class="label">Art</label><select id="periodKind" class="input"><option value="vacation">Ferien</option><option value="holiday">Feiertag</option><option value="other">Anderer Zeitraum</option></select></div>
+            <div><label class="label">Farbe</label><input id="periodColor" class="color period-color" type="color" value="#f2a65a"></div>
+          </div>
+          <label class="label topgap">Bezeichnung</label>
+          <input id="periodLabel" class="input" placeholder="z. B. Sommerferien">
+          <button id="addPeriod" class="secondary topgap full">Zeitraum speichern</button>
+          <div id="periodList" class="period-list topgap"></div>
+
+          <details class="nested-disclosure topgap">
+            <summary>Automatische Kalender-Abos</summary>
+            <div class="nested-disclosure-body">
+              <p class="small">Öffentliche oder geheime HTTPS-.ics-URLs werden standardmäßig alle 12 Stunden synchronisiert.</p>
+              <div class="subscription-form topgap">
+                <input id="subName" class="input" placeholder="Name, z. B. Feiertage Zürich">
+                <input id="subUrl" class="input" type="url" inputmode="url" autocomplete="off" placeholder="https://…/kalender.ics">
+                <div class="row">
+                  <select id="subKind" class="input"><option value="holiday">Feiertage</option><option value="vacation">Ferien</option><option value="other">Andere Termine</option></select>
+                  <input id="subColor" class="color" type="color" value="#d65a6f">
+                  <button id="addSubscription" class="secondary" type="button">Abo hinzufügen</button>
+                </div>
+              </div>
+              <div id="subscriptionList" class="subscription-list topgap"></div>
+            </div>
+          </details>
+
+          <details class="nested-disclosure topgap">
+            <summary>ICS-Datei einmalig importieren</summary>
+            <div class="nested-disclosure-body">
+              <p class="small">Importiert ganztägige Termine aus einer iCalendar-Datei (.ics). Beim erneuten Import werden Termine mit derselben UID aktualisiert.</p>
+              <form id="icsImportForm" class="topgap">
+                <input class="input" type="file" name="file" accept=".ics,text/calendar" required>
+                <div class="row topgap">
+                  <label class="small">Feiertagsfarbe</label>
+                  <input id="icsColor" name="color" class="color" type="color" value="#d65a6f">
+                  <input type="hidden" name="kind" value="holiday">
+                  <span class="spacer"></span>
+                  <button class="secondary" type="submit">ICS importieren</button>
+                </div>
+              </form>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details class="card settings-disclosure">
+        <summary>Kalender-Freigaben</summary>
+        <div class="settings-disclosure-body">
+          <p class="small">Schreibgeschützte iCal-Abos für Apple Kalender, Outlook und andere Kalender-Apps.</p>
+          <div class="ical-title">Gesamtkalender</div>
+          <div id="icalBox" class="pathbox calendar-url-display">Nicht aktiviert.</div>
+          <div class="row topgap ical-global-actions">
+            <button id="copyIcal" class="secondary" style="display:none">Kopieren</button>
+            <button id="showGlobalQr" class="secondary" style="display:none" type="button">QR-Code</button>
+            <a id="subscribeIcal" class="secondary link-button" style="display:none">Abonnieren</a>
+          </div>
+          <div id="globalQrBox" class="qr-box" style="display:none"><img id="globalQrImage" alt="QR-Code Gesamtkalender"></div>
+          <div id="icalPersonList" class="ical-person-list topgap"></div>
+          <p id="icalSecurityHint" class="small topgap" style="display:none">Jedes Unternehmen hat einen eigenen widerrufbaren Kalender-Schlüssel. Der Unternehmensfeed enthält globale Termine plus alle diesem Unternehmen zugeordneten Termine.</p>
+          <hr class="separator">
+          <p class="small">Kalendereinträge verwenden direkt den gespeicherten Termintitel. Globale Termine erscheinen automatisch in jedem Unternehmensfeed.</p>
+        </div>
+      </details>
+
+      <details class="card settings-disclosure">
+        <summary>Letzte Änderungen</summary>
+        <div class="settings-disclosure-body">
+          <div class="row"><p class="small">Die letzten 20 Änderungen. Gelöschte Termine können wiederhergestellt werden.</p><span class="spacer"></span><button id="refreshHistory" class="secondary" type="button">Aktualisieren</button></div>
+          <div id="historyList" class="history-list"></div>
+        </div>
+      </details>
+
+      <details class="card settings-disclosure">
+        <summary>CSV Import / Export</summary>
+        <div class="settings-disclosure-body">
+          <p class="small">Import unterstützt <b>Datum;Termin;Unternehmen;Beschreibung</b>. Mehrere Termine am selben Tag sind möglich.</p>
+          <form id="importForm"><input class="input" type="file" name="file" accept=".csv,text/csv" required><button class="secondary topgap" type="submit">CSV importieren</button></form>
+        </div>
+      </details>
+
+      <details class="card settings-disclosure">
+        <summary>Daten sichern / wiederherstellen</summary>
+        <div class="settings-disclosure-body">
+          <p class="small">Komplett-Backup mit Unternehmen, Terminen, Feiertagen und Kalender-Abos.</p>
+          <button id="fullDataExport" class="secondary full server-export" type="button">Komplett-Backup exportieren</button>
+          <form id="fullDataImportForm" class="topgap"><input class="input" type="file" name="file" accept=".json,application/json" required><button class="secondary danger full topgap" type="submit">Backup wiederherstellen</button></form>
+          <p class="small">Vor einer Wiederherstellung legt die App automatisch ein SQLite-Sicherheitsbackup an.</p>
+          <hr class="separator"><p class="ok">● SQLite persistent</p>
+          <div id="dataFile" class="pathbox">/app/data/stiftungskalender.sqlite</div>
+          <p class="small">Zusätzlich erzeugt die App nach Änderungen konsistente SQLite-Sicherungen im Unterordner <b>backups</b>.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+</div>
+
+
+<div id="modalBack" class="modalback" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="row"><h3 id="modalTitle">Termin eintragen</h3><span class="spacer"></span><button class="close" onclick="closeModal()">✕</button></div>
+    <label class="label" for="modalEventTitle">Titel</label>
+    <input id="modalEventTitle" class="input" maxlength="160" placeholder="z. B. Verwaltungsrat">
+    <div class="space"></div>
+    <label id="modalDateLabel" class="label">Datum</label>
+    <input id="modalDate" class="input" type="date"/>
+    <div id="modalDateContext" class="date-context"></div>
+    <div class="space"></div>
+    <div class="timing-control">
+      <label class="all-day-toggle"><input id="modalAllDay" type="checkbox" checked><span>Ganztägig</span></label>
+      <div id="modalTimeRange" class="time-range entry-datetime-range" hidden>
+        <label class="entry-start-time-field"><span>Von · Zeit</span><input id="modalStartTime" class="input time-input" type="time"></label>
+        <label class="entry-end-date-field"><span>Bis · Datum</span><input id="modalEndDate" class="input" type="date"></label>
+        <label class="entry-end-time-field"><span>Bis · Zeit</span><input id="modalEndTime" class="input time-input" type="time"></label>
+      </div>
+      <div id="modalRangeHint" class="small entry-range-hint" hidden></div>
+    </div>
+    <div class="space"></div>
+    <label class="label">Gilt für</label>
+    <button id="modalScopeButton" class="secondary full company-scope-button" type="button">Alle Unternehmen</button>
+    <div id="modalScopeSummary" class="scope-summary small">Alle Unternehmen</div>
+    <div class="space"></div>
+    <label class="label">Beschreibung <span class="small">(optional)</span></label>
+    <textarea id="modalNote" class="input" placeholder="Optional"></textarea>
+    <div class="space"></div>
+    <button class="primary" id="modalSave">Speichern</button>
+    <button class="secondary full topgap" id="modalDuplicate" style="display:none">Termin duplizieren</button>
+    <button class="secondary full topgap" id="modalShare" style="display:none">Termin teilen (.ics)</button>
+    <button class="secondary danger full topgap" id="modalDelete" style="display:none">Eintrag löschen</button>
+  </div>
+</div>
+
+
+
+<div id="companyScopeModalBack" class="modalback export-modalback" data-backdrop-close="company-scope">
+  <div class="modal export-modal company-scope-modal" role="dialog" aria-modal="true" aria-labelledby="companyScopeTitle">
+    <div class="export-modal-head">
+      <div><h3 id="companyScopeTitle">Unternehmen auswählen</h3><p class="small">Der Termin gilt entweder für alle oder für die ausgewählten Unternehmen.</p></div>
+      <button class="close" id="companyScopeClose" type="button" aria-label="Schliessen">✕</button>
+    </div>
+    <label class="checkline company-all-check"><input id="companyScopeAll" type="checkbox" checked> <strong>Alle Unternehmen</strong></label>
+    <input id="companyScopeSearch" class="input topgap" placeholder="Unternehmen suchen …">
+    <div id="companyScopeGrid" class="export-person-grid company-scope-grid topgap"></div>
+    <div class="row topgap"><button id="companyScopeNone" class="secondary" type="button">Keine auswählen</button><span class="spacer"></span><button id="companyScopeApply" class="primary" type="button">Auswahl übernehmen</button></div>
+  </div>
+</div>
+
+<div id="exportPeopleModalBack" class="modalback export-modalback" onclick="if(event.target===this)closeExportPeopleModal()">
+  <div class="modal export-modal" role="dialog" aria-modal="true" aria-labelledby="exportPeopleTitle">
+    <div class="export-modal-head">
+      <div>
+        <h3 id="exportPeopleTitle">Unternehmen auswählen</h3>
+        <p class="small">Die Auswahl gilt für Liste, CSV und PDF.</p>
+      </div>
+      <button class="close" onclick="closeExportPeopleModal()" aria-label="Schliessen">✕</button>
+    </div>
+    <div class="export-quick-actions export-quick-actions-single">
+      <button id="exportPeopleAll" class="secondary" type="button">Alle Unternehmen auswählen</button>
+    </div>
+    <div id="exportPeopleGrid" class="export-person-grid"></div>
+    <button id="exportPeopleApply" class="primary export-apply" type="button">Auswahl übernehmen</button>
+  </div>
+</div>
+
+<div id="yearMonthsModalBack" class="modalback export-modalback" onclick="if(event.target===this)closeYearMonthsModal()">
+  <div class="modal export-modal month-select-modal" role="dialog" aria-modal="true" aria-labelledby="yearMonthsTitle">
+    <div class="export-modal-head">
+      <div>
+        <h3 id="yearMonthsTitle">Monate auswählen</h3>
+        <p class="small">Die Auswahl gilt für Ansicht, CSV und PDF.</p>
+      </div>
+      <button class="close" onclick="closeYearMonthsModal()" aria-label="Schliessen">✕</button>
+    </div>
+    <div class="export-quick-actions export-quick-actions-single">
+      <button id="yearMonthsAll" class="secondary" type="button">Alle Monate auswählen</button>
+    </div>
+    <div id="yearMonthsGrid" class="year-month-grid"></div>
+    <button id="yearMonthsApply" class="primary export-apply" type="button">Auswahl übernehmen</button>
+  </div>
+</div>
+
+<div id="batchModalBack" class="modalback batch-modalback" onclick="if(event.target===this)closeBatchModal()">
+  <div class="modal batch-modal" role="dialog" aria-modal="true" aria-labelledby="batchModalTitle">
+    <div class="batch-head">
+      <div>
+        <h3 id="batchModalTitle">Mehrere Einträge</h3>
+        <p class="batch-hint">Einmalig erzeugen – danach sind es normale Einzeltermine.</p>
+      </div>
+      <button class="close" onclick="closeBatchModal()" aria-label="Schliessen">✕</button>
+    </div>
+
+    <div class="batch-form-grid">
+      <div class="batch-field batch-field-wide">
+        <label class="label" for="batchTitle">Titel</label>
+        <input id="batchTitle" class="input" maxlength="160" placeholder="z. B. Monatliches Reporting">
+      </div>
+      <div class="batch-field batch-field-wide">
+        <label class="label">Gilt für</label>
+        <button id="batchScopeButton" class="secondary full company-scope-button" type="button">Alle Unternehmen</button>
+        <div id="batchScopeSummary" class="scope-summary small">Alle Unternehmen</div>
+      </div>
+
+      <div class="batch-field">
+        <label class="label" for="batchWeekday">Wochentag</label>
+        <select id="batchWeekday" class="input">
+          <option value="0">Montag</option>
+          <option value="1">Dienstag</option>
+          <option value="2">Mittwoch</option>
+          <option value="3">Donnerstag</option>
+          <option value="4">Freitag</option>
+          <option value="5">Samstag</option>
+          <option value="6">Sonntag</option>
+        </select>
+      </div>
+
+      <div class="batch-field">
+        <label class="label" for="batchStart">Von</label>
+        <input id="batchStart" class="input" type="date">
+      </div>
+
+      <div class="batch-field">
+        <label class="label" for="batchEnd">Bis</label>
+        <input id="batchEnd" class="input" type="date">
+      </div>
+
+      <div class="batch-field batch-field-wide batch-timing-field">
+        <div class="batch-timing-row">
+          <label class="all-day-toggle compact"><input id="batchAllDay" type="checkbox" checked><span>Ganztägig</span></label>
+          <div id="batchTimeRange" class="time-range compact" hidden>
+            <label><span>Von</span><input id="batchStartTime" class="input time-input" type="time"></label>
+            <label><span>Bis</span><input id="batchEndTime" class="input time-input" type="time"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="batch-field batch-field-wide batch-skip-row">
+        <label class="checkline"><input id="batchSkipVacations" type="checkbox"> Ferien überspringen</label>
+        <label class="checkline"><input id="batchSkipHolidays" type="checkbox"> Feiertage überspringen</label>
+      </div>
+      <div class="batch-field batch-field-wide">
+        <label class="label" for="batchNote">Beschreibung <span class="small">(optional)</span></label>
+        <input id="batchNote" class="input" placeholder="z. B. Ort oder Hinweise">
+      </div>
+    </div>
+
+    <div id="batchPreviewBox" class="batch-preview" hidden></div>
+
+    <div class="batch-actions">
+      <button class="secondary" id="batchPreview">Vorschau</button>
+      <button class="primary" id="batchCreate" disabled>Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div id="personEditorBack" class="modalback person-editor-back" onclick="if(event.target===this)closePersonEditor()">
+  <div class="modal person-editor-modal" role="dialog" aria-modal="true" aria-labelledby="personEditorTitle">
+    <div class="row person-editor-head"><h3 id="personEditorTitle">Unternehmen bearbeiten</h3><span class="spacer"></span><button class="close" type="button" onclick="closePersonEditor()">✕</button></div>
+    <input id="personEditId" type="hidden">
+    <label class="label" for="personEditName">Name</label>
+    <input id="personEditName" class="input" autocomplete="off">
+    <div class="person-editor-color-row">
+      <div><label class="label" for="personEditColor">Farbe</label><input id="personEditColor" type="color" class="color person-editor-color"></div>
+      <input id="personEditIcalTitle" type="hidden">
+    </div>
+    <p class="small person-editor-hint">Die Farbe wird in Filtern, Legenden und Unternehmensfeeds verwendet.</p>
+    <button id="personEditorSave" class="primary" type="button">Speichern</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/static/app.js?v=2"></script>
+</body>
+</html>

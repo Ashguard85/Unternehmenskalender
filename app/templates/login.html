@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" type="image/png" href="/static/favicon-64.png">
+  <title>{{ title }} – Login</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f7f2;color:#1e2524;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:18px}
+    .card{width:min(420px,100%);background:#fff;border:1px solid #dfe4e1;border-radius:24px;padding:24px;box-shadow:0 18px 45px rgba(27,42,38,.09)}
+    .logo{width:50px;height:50px;border-radius:16px;overflow:hidden;margin-bottom:18px;box-shadow:0 6px 18px rgba(27,42,38,.15)}.logo img{width:100%;height:100%;display:block;object-fit:cover}
+    h1{margin:0 0 6px;font-size:27px}.muted{color:#68716f;margin:0 0 22px}.label{display:block;font-size:12px;font-weight:700;color:#68716f;margin:13px 0 7px}
+    input{width:100%;border:1px solid #dfe4e1;border-radius:14px;padding:13px;font:inherit}
+    button{width:100%;margin-top:18px;border:0;border-radius:14px;padding:13px;background:#305f57;color:#fff;font:inherit;font-weight:800}
+    .error{background:#fff0ee;color:#8b3731;padding:10px 12px;border-radius:12px;font-size:13px;margin-bottom:12px}
+  </style>
+</head>
+<body>
+  <form class="card" method="post">
+    <div class="logo"><img src="/static/icon-192.png" alt=""></div>
+    <h1>{{ title }}</h1>
+    <p class="muted">Stiftungskalender öffnen</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <label class="label">Benutzer</label>
+    <input name="user" autocomplete="username" required>
+    <label class="label">Passwort</label>
+    <input name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Anmelden</button>
+  </form>
+</body>
+</html>
