@@ -12,6 +12,7 @@ let exportPeopleAllSelected = true;
 const YEAR_MONTH_NAMES = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 let yearMonths = Array.from({length:12},(_,i)=>i+1);
 let editingId = null;
+let yearDayCards = new Map();
 
 let entryScopes={
   quick:{all:true,ids:[]},
@@ -472,6 +473,7 @@ function closeExportPeopleModal(){
 function setExportPeopleChecks(mode){
   const boxes=qsa('#exportPeopleGrid input[type="checkbox"]');
   if(mode==="all") boxes.forEach(b=>b.checked=true);
+  if(mode==="none") boxes.forEach(b=>b.checked=false);
 }
 function applyExportPeopleSelection(){
   const chosen=qsa('#exportPeopleGrid input[type="checkbox"]:checked').map(b=>b.value);
@@ -576,6 +578,7 @@ function periodMapForYear(year){
 }
 function renderYear(){
   const year=Number(qs("#yearSelect").value);const company=qs("#yearCompanyFilter")?.value||"";
+  yearDayCards=new Map();
   const visibleMonths=yearMonths.map(m=>m-1);
   const filtered=entries.filter(e=>eventMatchesCompany(e,company));
   const byDay=new Map();
@@ -594,9 +597,12 @@ function renderYear(){
       const cards=[];
       for(const e of direct)cards.push({e,label:e.title||e.person||"Termin",continuation:false});
       for(const e of cont){const final=iso===entryEndDay(e);cards.push({e,label:`${e.title||e.person||"Termin"}${final&&e.end_time?` · bis ${e.end_time}`:""}`,continuation:true});}
-      const visible=cards.slice(0,3);
+      yearDayCards.set(iso,cards);
+      const maxVisible=4;
+      const visible=cards.length>maxVisible?cards.slice(0,maxVisible-1):cards;
       const stack=visible.map(x=>`<button type="button" class="year-event-pill ${x.continuation?"continuation":""}" style="background:${esc(x.e.color)}" data-open-entry="${x.e.id}" title="${esc(x.label)} · ${esc(x.e.scope_label||"Alle Unternehmen")}"><span>${esc(x.label)}</span></button>`).join("");
-      const more=cards.length>3?`<span class="year-more">+${cards.length-3}</span>`:"";
+      const hiddenCount=cards.length-visible.length;
+      const more=hiddenCount>0?`<button type="button" class="year-more" data-open-day="${iso}" title="Alle ${cards.length} Termine anzeigen">+${hiddenCount} weitere</button>`:"";
       const markTitle=dayMarks.map(p=>`${periodKindName(p.kind)}: ${p.label}`).join(" · ");
       const rail=dayMarks.length?`<div class="period-rail" title="${esc(markTitle)}">${dayMarks.map(p=>`<span class="period-segment" style="background:${esc(p.color)}"></span>`).join("")}</div>`:"";
       const cellClass=[weekend?"weekend":"",dayMarks.length?"has-period":"",cards.length?"has-entry":""].filter(Boolean).join(" ");
@@ -611,6 +617,23 @@ function renderYear(){
   qs("#legend").innerHTML='<span class="legend-title">Legende:</span>'+companyLegend+`<span><i class="dot" style="background:var(--weekend)"></i>Wochenende</span>`+periodLegend.join("");
   const params=yearMonthQuery();if(company)params.append("company",company);const query=params.toString();
   qs("#csvLink").href=`/export.csv?year=${year}${query?`&${query}`:""}`;updateYearMonthButton();
+}
+
+function closeYearDayModal(){
+  qs("#yearDayModalBack")?.classList.remove("open");
+  if(!qsa(".modalback.open").length) document.body.classList.remove("modal-open");
+}
+function openYearDayModal(iso){
+  const cards=yearDayCards.get(iso)||[];
+  if(!cards.length)return;
+  const d=new Date(`${iso}T12:00:00`);
+  const title=d.toLocaleDateString("de-CH",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});
+  const titleEl=qs("#yearDayModalTitle");if(titleEl)titleEl.textContent=title;
+  const sub=qs("#yearDayModalSub");if(sub)sub.textContent=`${cards.length} Termin${cards.length===1?"":"e"}`;
+  const list=qs("#yearDayModalList");
+  if(list) list.innerHTML=cards.map(x=>`<button type="button" class="year-day-event" data-open-entry="${x.e.id}"><span class="year-day-event-color" style="background:${esc(x.e.color)}"></span><span class="year-day-event-main"><strong>${esc(x.label)}</strong><small>${esc(x.e.scope_label||"Alle Unternehmen")}${x.e.note?` · ${esc(x.e.note)}`:""}</small></span></button>`).join("");
+  qs("#yearDayModalBack")?.classList.add("open");
+  document.body.classList.add("modal-open");
 }
 
 async function renderStatsByPerson(){
@@ -935,9 +958,18 @@ async function shareServerFile(url, fallbackName, mimeType, preparing="Datei wir
 
 
 document.addEventListener("click",e=>{
+  const openDay=e.target.closest("[data-open-day]");
+  if(openDay){
+    e.preventDefault();
+    e.stopPropagation();
+    openYearDayModal(openDay.dataset.openDay);
+    return;
+  }
+
   const openEntry=e.target.closest("[data-open-entry]");
   if(openEntry){
     e.preventDefault();
+    if(openEntry.closest("#yearDayModalBack")) closeYearDayModal();
     openModal(Number(openEntry.dataset.openEntry));
     return;
   }
@@ -1019,6 +1051,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   });
   qs("#yearPrintButton")?.addEventListener("click",()=>window.print());
   qs("#exportPeopleAll").addEventListener("click",()=>setExportPeopleChecks("all"));
+  qs("#exportPeopleNone")?.addEventListener("click",()=>setExportPeopleChecks("none"));
   qs("#exportPeopleApply").addEventListener("click",applyExportPeopleSelection);
   qs("#batchPreview").addEventListener("click",previewBatch);
   qs("#batchCreate").addEventListener("click",createBatch);
@@ -1071,6 +1104,8 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   qs("#yearMonthSelect").addEventListener("click",openYearMonthsModal);
   qs("#yearMonthsAll").addEventListener("click",()=>setYearMonthChecks("all"));
   qs("#yearMonthsApply").addEventListener("click",applyYearMonthSelection);
+  qs("#yearDayModalClose")?.addEventListener("click",closeYearDayModal);
+  qs("#yearDayModalBack")?.addEventListener("click",e=>{if(e.target===qs("#yearDayModalBack"))closeYearDayModal();});
   qs("#quickScopeButton")?.addEventListener("click",()=>openCompanyScopeModal("quick"));
   qs("#modalScopeButton")?.addEventListener("click",()=>openCompanyScopeModal("modal"));
   qs("#batchScopeButton")?.addEventListener("click",()=>openCompanyScopeModal("batch"));
@@ -1078,6 +1113,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   qs("#companyScopeModalBack")?.addEventListener("click",e=>{if(e.target===qs("#companyScopeModalBack"))closeCompanyScopeModal();});
   qs("#companyScopeAll")?.addEventListener("change",e=>{scopeDraft.all=e.target.checked;renderCompanyScopeGrid();});
   qs("#companyScopeSearch")?.addEventListener("input",renderCompanyScopeGrid);
+  qs("#companyScopeSelectAll")?.addEventListener("click",()=>{scopeDraft.all=true;scopeDraft.ids=[];if(qs("#companyScopeAll"))qs("#companyScopeAll").checked=true;renderCompanyScopeGrid();});
   qs("#companyScopeNone")?.addEventListener("click",()=>{scopeDraft.all=false;scopeDraft.ids=[];if(qs("#companyScopeAll"))qs("#companyScopeAll").checked=false;renderCompanyScopeGrid();});
   qs("#companyScopeApply")?.addEventListener("click",applyCompanyScope);
   qs("#batchTitle")?.addEventListener("input",resetBatchPreview);

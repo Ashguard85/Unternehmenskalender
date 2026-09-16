@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="icon" type="image/png" href="/static/favicon-64.png">
-  <link rel="stylesheet" href="/static/app.css?v=3">
+  <link rel="stylesheet" href="/static/app.css?v=6">
   <title>{{ title }}</title>
 </head>
 <body>
@@ -167,7 +167,7 @@
       <details class="card settings-disclosure" open>
         <summary>System</summary>
         <div class="settings-disclosure-body">
-          <div class="system-facts"><div><span>Version</span><strong>v4</strong></div><div><span>Betrieb</span><strong>Docker / Desktop</strong></div><div><span>Daten</span><strong>SQLite persistent</strong></div></div>
+          <div class="system-facts"><div><span>Version</span><strong>v6</strong></div><div><span>Betrieb</span><strong>Docker / Desktop</strong></div><div><span>Daten</span><strong>SQLite persistent</strong></div></div>
           <p class="small topgap">Updates erfolgen kontrolliert über Docker/Portainer. Browser-Caching dient nur normalen statischen Dateien; es gibt keinen separaten App-Updatepfad.</p>
         </div>
       </details>
@@ -313,6 +313,16 @@
 
 
 
+<div id="yearDayModalBack" class="modalback export-modalback">
+  <div class="modal export-modal year-day-modal" role="dialog" aria-modal="true" aria-labelledby="yearDayModalTitle">
+    <div class="export-modal-head">
+      <div><h3 id="yearDayModalTitle">Termine</h3><p id="yearDayModalSub" class="small"></p></div>
+      <button class="close" id="yearDayModalClose" type="button" aria-label="Schliessen">✕</button>
+    </div>
+    <div id="yearDayModalList" class="year-day-event-list"></div>
+  </div>
+</div>
+
 <div id="companyScopeModalBack" class="modalback export-modalback" data-backdrop-close="company-scope">
   <div class="modal export-modal company-scope-modal" role="dialog" aria-modal="true" aria-labelledby="companyScopeTitle">
     <div class="export-modal-head">
@@ -322,7 +332,11 @@
     <label class="checkline company-all-check"><input id="companyScopeAll" type="checkbox" checked> <strong>Alle Unternehmen</strong></label>
     <input id="companyScopeSearch" class="input topgap" placeholder="Unternehmen suchen …">
     <div id="companyScopeGrid" class="export-person-grid company-scope-grid topgap"></div>
-    <div class="row topgap"><button id="companyScopeNone" class="secondary" type="button">Keine auswählen</button><span class="spacer"></span><button id="companyScopeApply" class="primary" type="button">Auswahl übernehmen</button></div>
+    <div class="export-quick-actions topgap">
+      <button id="companyScopeSelectAll" class="secondary" type="button">Alle anwählen</button>
+      <button id="companyScopeNone" class="secondary" type="button">Alle abwählen</button>
+    </div>
+    <div class="row topgap"><span class="spacer"></span><button id="companyScopeApply" class="primary" type="button">Auswahl übernehmen</button></div>
   </div>
 </div>
 
@@ -335,8 +349,9 @@
       </div>
       <button class="close" onclick="closeExportPeopleModal()" aria-label="Schliessen">✕</button>
     </div>
-    <div class="export-quick-actions export-quick-actions-single">
-      <button id="exportPeopleAll" class="secondary" type="button">Alle Unternehmen auswählen</button>
+    <div class="export-quick-actions">
+      <button id="exportPeopleAll" class="secondary" type="button">Alle anwählen</button>
+      <button id="exportPeopleNone" class="secondary" type="button">Alle abwählen</button>
     </div>
     <div id="exportPeopleGrid" class="export-person-grid"></div>
     <button id="exportPeopleApply" class="primary export-apply" type="button">Auswahl übernehmen</button>
@@ -449,6 +464,6 @@
 </div>
 
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=6"></script>
 </body>
 </html>

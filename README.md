@@ -1,14 +1,17 @@
-# v4 – Jahresdruck und PDF-Export repariert
+# v6 – A3-Jahresübersicht und Unternehmensauswahl verbessert
 
-v4 behebt zwei Fehler aus v3:
+v6 bündelt die Verbesserungen der Jahresübersicht mit der erweiterten Unternehmensauswahl:
 
-- Der Jahres-PDF-Export verursachte einen HTTP-500-Fehler, weil die Hilfsfunktion `period_rows()` beim Desktop-Umbau fehlte. Sie ist wieder vorhanden und wird auch von `/api/periods` verwendet.
-- PDF-Links öffnen nur noch einen neuen Tab. Die bisherige Fallback-Logik konnte bei Browsern mit `noopener` trotz erfolgreich geöffnetem Tab zusätzlich den ursprünglichen App-Tab auf die PDF-URL weiterleiten.
-- Der Jahres-PDF-Renderer zeichnet den Kalender jetzt direkt auf die PDF-Seite. Dadurch ist er unabhängig von Platypus-Layoutgrenzen und robuster bei Legenden, Mehrtagesterminen und Monatsauswahl.
-- Jahres-PDF wurde mit Testdaten, Unternehmensfilter, Zeitraum/Legende und Einzelmonat erfolgreich als gültige PDF erzeugt.
+- Jahres-PDF im Format **A3 quer** (Monats-Einzelausgabe bleibt A4).
+- Mehrere Termine pro Tag werden im Jahres-PDF als getrennte, farbige Einträge dargestellt statt zu einem einzigen Sammeltext zusammengefasst.
+- Bei sehr vielen Terminen erscheint kompakt `+N weitere`.
+- Die Desktop-Jahresansicht bietet mehr Höhe pro Tag, zeigt bis zu mehrere einzelne Termine und öffnet versteckte weitere Termine über `+N weitere` in einer Tagesliste.
+- Browser-Druck der Jahresansicht verwendet ebenfalls **A3 quer**.
+- In der Unternehmensauswahl gibt es jetzt direkt **Alle anwählen** und **Alle abwählen**.
+- Dies gilt sowohl beim Zuordnen eines Termins als auch beim Unternehmensfilter für Liste/CSV/PDF.
 - Keine Datenbankmigration erforderlich.
 
-# Stiftungskalender v2 — Docker Desktop
+# Stiftungskalender v6 — Docker Desktop
 
 Eigenständiger, desktop-first Stiftungskalender für mehrere Unternehmen.
 
@@ -80,4 +83,4 @@ Das JSON-Komplettbackup enthält Unternehmen, Termine, Zeiträume und Kalender-A
 
 ## Versionierung
 
-Dieses eigenständige Desktop-Projekt beginnt neu bei v1. Diese Ausgabe ist **v4**. Die frühere PWA-/Push-Architektur bleibt vollständig entfernt.
+Dieses eigenständige Desktop-Projekt beginnt neu bei v1. Diese Ausgabe ist **v6**. Die frühere PWA-/Push-Architektur bleibt vollständig entfernt.

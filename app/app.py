@@ -26,14 +26,14 @@ import qrcode
 
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A3, A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Flowable
 from reportlab.pdfgen import canvas as pdf_canvas
 
 APP_TITLE = os.getenv("APP_TITLE", "Stiftungskalender")
-APP_VERSION = "4"
+APP_VERSION = "6"
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DB_PATH = DATA_DIR / "stiftungskalender.sqlite"
 BACKUP_DIR = DATA_DIR / "backups"
@@ -1820,9 +1820,9 @@ def export_year_pdf():
     # Platypus table.  The annual grid has a fixed geometry and direct drawing
     # avoids LayoutError exceptions when legends or row heights change.
     output = io.BytesIO()
-    page_size = A4 if single_month else landscape(A4)
+    page_size = A4 if single_month else landscape(A3)
     page_w, page_h = page_size
-    margin_x = 10 * mm if single_month else 7 * mm
+    margin_x = 10 * mm if single_month else 8 * mm
     plan_title = (
         f"Monatsplan {month_names[month_indices[0] - 1]} {year}"
         if single_month
@@ -1883,7 +1883,7 @@ def export_year_pdf():
 
     # Title
     pdf.setFillColor(colors.HexColor("#1e2524"))
-    pdf.setFont("Helvetica-Bold", 11 if single_month else 10)
+    pdf.setFont("Helvetica-Bold", 11 if single_month else 13)
     pdf.drawString(margin_x, page_h - 9 * mm, plan_title)
 
     grid_left = margin_x
@@ -1892,23 +1892,23 @@ def export_year_pdf():
     grid_bottom = 8 * mm + legend_total_h + (1.5 * mm if legend_items else 0)
     grid_w = grid_right - grid_left
     grid_h = grid_top - grid_bottom
-    header_h = 6 * mm if single_month else 4.8 * mm
+    header_h = 6 * mm if single_month else 6.0 * mm
     day_h = max(3.5 * mm, (grid_h - header_h) / 31.0)
-    day_col_w = 10 * mm if single_month else 6.2 * mm
+    day_col_w = 10 * mm if single_month else 7.5 * mm
     month_w = (grid_w - 2 * day_col_w) / len(month_indices)
 
     # Header background + labels.
     pdf.setFillColor(colors.HexColor("#f5f7f6"))
     pdf.rect(grid_left, grid_top - header_h, grid_w, header_h, stroke=0, fill=1)
     pdf.setFillColor(colors.HexColor("#1e2524"))
-    pdf.setFont("Helvetica-Bold", 6.2 if single_month else 5.2)
+    pdf.setFont("Helvetica-Bold", 6.2 if single_month else 6.2)
     pdf.drawCentredString(grid_left + day_col_w / 2, grid_top - header_h + 1.6 * mm, "Tag")
     for idx, month_idx in enumerate(month_indices):
         x = grid_left + day_col_w + idx * month_w
-        label, fsize = fitted_text(month_names[month_idx - 1], month_w - 2, start_size=(6.2 if single_month else 5.2), min_size=3.5)
+        label, fsize = fitted_text(month_names[month_idx - 1], month_w - 2, start_size=(6.2 if single_month else 6.2), min_size=4.0)
         pdf.setFont("Helvetica-Bold", fsize)
         pdf.drawCentredString(x + month_w / 2, grid_top - header_h + 1.6 * mm, label)
-    pdf.setFont("Helvetica-Bold", 6.2 if single_month else 5.2)
+    pdf.setFont("Helvetica-Bold", 6.2 if single_month else 6.2)
     pdf.drawCentredString(grid_right - day_col_w / 2, grid_top - header_h + 1.6 * mm, "Tag")
 
     # Day rows and calendar cells.
@@ -1919,8 +1919,8 @@ def export_year_pdf():
         pdf.rect(grid_left, y, day_col_w, day_h, stroke=0, fill=1)
         pdf.rect(grid_right - day_col_w, y, day_col_w, day_h, stroke=0, fill=1)
         pdf.setFillColor(colors.HexColor("#1e2524"))
-        pdf.setFont("Helvetica-Bold", 5.7 if single_month else 4.8)
-        baseline = y + max(1.0, (day_h - (5.7 if single_month else 4.8)) / 2)
+        pdf.setFont("Helvetica-Bold", 5.7 if single_month else 5.6)
+        baseline = y + max(1.0, (day_h - (5.7 if single_month else 5.6)) / 2)
         pdf.drawCentredString(grid_left + day_col_w / 2, baseline, str(day_num))
         pdf.drawCentredString(grid_right - day_col_w / 2, baseline, str(day_num))
 
@@ -1938,45 +1938,82 @@ def export_year_pdf():
                 pdf.setFillColor(colors.HexColor("#fff2b9"))
                 pdf.rect(x, y, month_w, day_h, stroke=0, fill=1)
 
-            entry = by_day.get(iso)
-            continuation = continuation_by_day.get(iso)
+            direct_rows = grouped_by_day.get(iso, [])
+            continuation_rows = continuation_groups.get(iso, [])
             periods = periods_by_day.get(iso, [])
             inset = 0.6
-            rail_w = month_w * 0.17 if periods else 0
+            rail_w = month_w * 0.14 if periods else 0
             gap = 0.6 if periods else 0
             content_w = max(1, month_w - 2 * inset - rail_w - gap)
             content_h = max(1, day_h - 2 * inset)
 
-            if continuation and entry:
-                cont_h = content_h * 0.28
-                entry_h = max(1, content_h - cont_h - 0.45)
-            elif continuation:
-                cont_h = content_h
-                entry_h = 0
+            cards = []
+            for row in direct_rows:
+                cards.append({
+                    "row": row,
+                    "label": str(row.get("title") or row.get("person") or "Termin"),
+                    "continuation": False,
+                })
+            for row in continuation_rows:
+                label = str(row.get("title") or row.get("person") or "Termin")
+                if row.get("_continuation_final") and not int(row.get("all_day") or 0) and row.get("end_time"):
+                    label += f" · bis {row.get('end_time')}"
+                cards.append({"row": row, "label": label, "continuation": True})
+
+            max_cards = 5 if single_month else 3
+            if len(cards) > max_cards:
+                visible_cards = cards[: max_cards - 1]
+                hidden_count = len(cards) - len(visible_cards)
+                display_cards = visible_cards + [{"more": hidden_count}]
             else:
-                cont_h = 0
-                entry_h = content_h
+                display_cards = cards
 
-            if entry:
-                pdf.setFillColor(safe_color(entry.get("color")))
-                pdf.roundRect(x + inset, y + inset, content_w, entry_h, 1.4, stroke=0, fill=1)
-                label, fsize = fitted_text(entry.get("person") or entry.get("title") or "Termin", content_w - 2, start_size=(5.3 if single_month else 4.4), min_size=2.7)
-                pdf.setFillColor(colors.HexColor("#1e2524"))
-                pdf.setFont("Helvetica-Bold", fsize)
-                pdf.drawCentredString(x + inset + content_w / 2, y + inset + max(0.5, (entry_h - fsize) / 2 + 0.4), label)
+            if display_cards:
+                card_gap = 0.45 if single_month else 0.35
+                card_h = max(1.0, (content_h - card_gap * (len(display_cards) - 1)) / len(display_cards))
+                for card_idx, card in enumerate(display_cards):
+                    card_y = y + inset + (len(display_cards) - 1 - card_idx) * (card_h + card_gap)
+                    if "more" in card:
+                        pdf.setFillColor(colors.HexColor("#f5f7f6"))
+                        pdf.setStrokeColor(colors.HexColor("#cfd8d4"))
+                        pdf.setLineWidth(0.25)
+                        pdf.roundRect(x + inset, card_y, content_w, card_h, 1.0, stroke=1, fill=1)
+                        more_label = f"+{card['more']} weitere"
+                        more_label, fsize = fitted_text(
+                            more_label,
+                            content_w - 2,
+                            font_name="Helvetica-Bold",
+                            start_size=(5.0 if single_month else 4.4),
+                            min_size=3.0,
+                        )
+                        pdf.setFillColor(colors.HexColor("#596360"))
+                        pdf.setFont("Helvetica-Bold", fsize)
+                        pdf.drawCentredString(
+                            x + inset + content_w / 2,
+                            card_y + max(0.35, (card_h - fsize) / 2 + 0.35),
+                            more_label,
+                        )
+                        continue
 
-            if continuation:
-                cont_y = y + inset + (entry_h + 0.45 if entry else 0)
-                pdf.setFillColor(safe_color(continuation.get("color"), "#e4efeb"))
-                pdf.roundRect(x + inset, cont_y, content_w, cont_h, 1.2, stroke=0, fill=1)
-                label = str(continuation.get("person") or continuation.get("title") or "Termin")
-                suffix = str(continuation.get("continuation_text") or "").strip()
-                if suffix:
-                    label = f"{label} · {suffix}"
-                label, fsize = fitted_text(label, content_w - 2, start_size=(4.8 if single_month else 3.7), min_size=2.5)
-                pdf.setFillColor(colors.HexColor("#1e2524"))
-                pdf.setFont("Helvetica-Bold", fsize)
-                pdf.drawCentredString(x + inset + content_w / 2, cont_y + max(0.4, (cont_h - fsize) / 2 + 0.25), label)
+                    row = card["row"]
+                    continuation = bool(card.get("continuation"))
+                    pdf.setFillColor(safe_color(row.get("color"), "#e4efeb" if continuation else "#ececec"))
+                    pdf.setStrokeColor(colors.HexColor("#8ba59d") if continuation else safe_color(row.get("color")))
+                    pdf.setLineWidth(0.35 if continuation else 0.15)
+                    pdf.roundRect(x + inset, card_y, content_w, card_h, 1.0, stroke=1 if continuation else 0, fill=1)
+                    label, fsize = fitted_text(
+                        card.get("label") or "Termin",
+                        content_w - 2,
+                        start_size=(5.2 if single_month else 4.6),
+                        min_size=(3.2 if single_month else 3.0),
+                    )
+                    pdf.setFillColor(colors.HexColor("#1e2524"))
+                    pdf.setFont("Helvetica-Bold", fsize)
+                    pdf.drawCentredString(
+                        x + inset + content_w / 2,
+                        card_y + max(0.35, (card_h - fsize) / 2 + 0.35),
+                        label,
+                    )
 
             if periods:
                 rail_x = x + month_w - inset - rail_w
